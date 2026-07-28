@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import io
 from pathlib import Path
 
@@ -7,6 +9,7 @@ import pandas as pd
 from pandas.tseries.offsets import BDay
 
 import contrarian_backtest as cb
+from cboe_pc_cache import CBOE_PC_CACHE_GZIP_B64
 
 FRED_CACHE = Path("output/fred_hy_oas.csv")
 OFFICIAL_FRED_OVERLAY = """date,value
@@ -104,6 +107,26 @@ OFFICIAL_FRED_OVERLAY = """date,value
 """
 
 
+def load_cboe_pc_from_audited_cache(trading_dates: pd.DatetimeIndex) -> pd.DataFrame:
+    raw = gzip.decompress(base64.b64decode(CBOE_PC_CACHE_GZIP_B64))
+    df = pd.read_csv(io.BytesIO(raw))
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.normalize()
+    df["total_pc"] = pd.to_numeric(df["total_pc"], errors="coerce")
+    df["equity_pc"] = pd.to_numeric(df["equity_pc"], errors="coerce")
+    df = df.dropna(subset=["date", "total_pc", "equity_pc"]).drop_duplicates("date", keep="last")
+    requested = pd.DatetimeIndex(trading_dates).normalize()
+    out = df.set_index("date").reindex(requested)
+    missing = out[["total_pc", "equity_pc"]].isna().any(axis=1)
+    if missing.any():
+        raise RuntimeError(f"CBOE cache missing {int(missing.sum())} requested sessions")
+    df.to_csv(cb.OUT / "cboe_pc.csv", index=False)
+    (cb.OUT / "cboe_source_audit.txt").write_text(
+        f"Audited exact-date Cboe daily statistics cache: {len(df)} rows; "
+        f"requested {len(requested)} rows; missing 0.\n"
+    )
+    return out
+
+
 def load_hy_oas_from_audited_cache() -> pd.DataFrame:
     if not FRED_CACHE.exists():
         raise RuntimeError(f"HY OAS cache missing: {FRED_CACHE}")
@@ -138,5 +161,24 @@ def load_hy_oas_from_audited_cache() -> pd.DataFrame:
     return combined
 
 
+def robust_asof_value(base: pd.DataFrame, releases: pd.DataFrame, value_cols: list[str]) -> pd.DataFrame:
+    left = base.reset_index()
+    index_col = base.index.name if base.index.name in left.columns else left.columns[0]
+    left = left.rename(columns={index_col: "date"})
+    left["date"] = pd.to_datetime(left["date"], errors="coerce").dt.normalize()
+    left = left.drop(columns=[c for c in left.columns if c.startswith("effective_date")], errors="ignore")
+    left = left.sort_values("date")
+
+    right = releases[["effective_date"] + value_cols].copy()
+    right["effective_date"] = pd.to_datetime(right["effective_date"], errors="coerce").dt.normalize()
+    right = right.dropna(subset=["effective_date"]).sort_values("effective_date")
+
+    out = pd.merge_asof(left, right, left_on="date", right_on="effective_date", direction="backward")
+    out = out.drop(columns=["effective_date"], errors="ignore")
+    return out.set_index("date")
+
+
+cb.load_cboe_pc = load_cboe_pc_from_audited_cache
 cb.load_hy_oas = load_hy_oas_from_audited_cache
+cb.asof_value = robust_asof_value
 cb.main()
