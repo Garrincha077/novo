@@ -31,17 +31,31 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install pandas numpy requests beautifulsoup4 lxml xlrd openpyxl yfinance scipy matplotlib
-      - name: Cache official FRED HY OAS CSV
+      - name: Cache HY OAS series
         shell: bash
         run: |
           mkdir -p output
-          curl --http1.1 --fail --location --retry 6 --retry-all-errors --connect-timeout 30 --max-time 420 \
+          set +e
+          timeout 90 curl --http1.1 --fail --location --retry 2 --retry-all-errors --connect-timeout 20 --max-time 75 \
             --user-agent 'Mozilla/5.0' \
             'https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2' \
             --output output/fred_hy_oas.csv
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ] && [ -s output/fred_hy_oas.csv ]; then
+            echo 'official_fred_csv' > output/hy_oas_transport.txt
+          else
+            rm -f output/fred_hy_oas.csv
+            curl --fail --location --retry 4 --retry-all-errors --connect-timeout 30 --max-time 180 \
+              --user-agent 'Mozilla/5.0' \
+              'https://huggingface.co/datasets/Sashank-810/crisisnet-dataset/resolve/main/Module_1/credit_spreads/BAMLH0A0HYM2.csv?download=true' \
+              --output output/fred_hy_oas.csv
+            echo 'public_fred_series_mirror_huggingface' > output/hy_oas_transport.txt
+          fi
           test -s output/fred_hy_oas.csv
           head -n 3 output/fred_hy_oas.csv
           tail -n 3 output/fred_hy_oas.csv
+          cat output/hy_oas_transport.txt
       - name: Run backtest
         shell: bash
         run: |
