@@ -7,6 +7,12 @@ on:
     paths:
       - 'contrarian_backtest.py'
       - '.github/workflows/contrarian_backtest.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'contrarian_backtest.py'
+      - '.github/workflows/contrarian_backtest.yml'
   workflow_dispatch:
 
 permissions:
