@@ -1,0 +1,31 @@
+name: Contrarian two-year backtest
+
+on:
+  push:
+    branches:
+      - temp-contrarian-backtest-20260728
+    paths:
+      - 'contrarian_backtest.py'
+      - '.github/workflows/contrarian_backtest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install pandas numpy requests beautifulsoup4 lxml xlrd openpyxl yfinance scipy matplotlib
+      - name: Run backtest
+        run: python contrarian_backtest.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contrarian-backtest-results
+          path: output/**
