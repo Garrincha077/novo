@@ -110,11 +110,11 @@ OFFICIAL_FRED_OVERLAY = """date,value
 def load_cboe_pc_from_audited_cache(trading_dates: pd.DatetimeIndex) -> pd.DataFrame:
     raw = gzip.decompress(base64.b64decode(CBOE_PC_CACHE_GZIP_B64))
     df = pd.read_csv(io.BytesIO(raw))
-    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.normalize()
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.normalize().astype("datetime64[ns]")
     df["total_pc"] = pd.to_numeric(df["total_pc"], errors="coerce")
     df["equity_pc"] = pd.to_numeric(df["equity_pc"], errors="coerce")
     df = df.dropna(subset=["date", "total_pc", "equity_pc"]).drop_duplicates("date", keep="last")
-    requested = pd.DatetimeIndex(trading_dates).normalize()
+    requested = pd.DatetimeIndex(trading_dates).normalize().astype("datetime64[ns]")
     out = df.set_index("date").reindex(requested)
     missing = out[["total_pc", "equity_pc"]].isna().any(axis=1)
     if missing.any():
@@ -138,20 +138,20 @@ def load_hy_oas_from_audited_cache() -> pd.DataFrame:
         raise RuntimeError(f"HY OAS cache has no value column: {base.columns.tolist()}")
 
     base = pd.DataFrame({
-        "observation_date": pd.to_datetime(base[date_col], errors="coerce").dt.normalize(),
+        "observation_date": pd.to_datetime(base[date_col], errors="coerce").dt.normalize().astype("datetime64[ns]"),
         "hy_oas": pd.to_numeric(base[value_col], errors="coerce"),
     }).dropna()
 
     overlay = pd.read_csv(io.StringIO(OFFICIAL_FRED_OVERLAY))
     overlay = pd.DataFrame({
-        "observation_date": pd.to_datetime(overlay["date"], errors="coerce").dt.normalize(),
+        "observation_date": pd.to_datetime(overlay["date"], errors="coerce").dt.normalize().astype("datetime64[ns]"),
         "hy_oas": pd.to_numeric(overlay["value"], errors="coerce"),
     }).dropna()
 
     combined = pd.concat([base, overlay], ignore_index=True)
     combined = combined.drop_duplicates("observation_date", keep="last").sort_values("observation_date")
     combined = combined[(combined["observation_date"] >= cb.WARMUP) & (combined["observation_date"] <= cb.END)]
-    combined["effective_date"] = combined["observation_date"] + BDay(1)
+    combined["effective_date"] = (combined["observation_date"] + BDay(1)).astype("datetime64[ns]")
     combined.to_csv(cb.OUT / "fred_hy_oas_audited.csv", index=False)
     (cb.OUT / "hy_oas_source_audit.txt").write_text(
         "Base transport: public mirror of FRED series through 2026-03-20.\n"
@@ -165,12 +165,12 @@ def robust_asof_value(base: pd.DataFrame, releases: pd.DataFrame, value_cols: li
     left = base.reset_index()
     index_col = base.index.name if base.index.name in left.columns else left.columns[0]
     left = left.rename(columns={index_col: "date"})
-    left["date"] = pd.to_datetime(left["date"], errors="coerce").dt.normalize()
+    left["date"] = pd.to_datetime(left["date"], errors="coerce").dt.normalize().astype("datetime64[ns]")
     left = left.drop(columns=[c for c in left.columns if c.startswith("effective_date")], errors="ignore")
     left = left.sort_values("date")
 
     right = releases[["effective_date"] + value_cols].copy()
-    right["effective_date"] = pd.to_datetime(right["effective_date"], errors="coerce").dt.normalize()
+    right["effective_date"] = pd.to_datetime(right["effective_date"], errors="coerce").dt.normalize().astype("datetime64[ns]")
     right = right.dropna(subset=["effective_date"]).sort_values("effective_date")
 
     out = pd.merge_asof(left, right, left_on="date", right_on="effective_date", direction="backward")
