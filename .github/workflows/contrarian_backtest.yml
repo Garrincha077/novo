@@ -30,8 +30,16 @@ jobs:
       - name: Install dependencies
         run: pip install pandas numpy requests beautifulsoup4 lxml xlrd openpyxl yfinance scipy matplotlib
       - name: Run backtest
-        run: python contrarian_backtest.py
+        shell: bash
+        run: |
+          mkdir -p output
+          set +e
+          python contrarian_backtest.py 2>&1 | tee output/run.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" | tee -a output/run.log
+          exit $code
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: contrarian-backtest-results
           path: output/**
