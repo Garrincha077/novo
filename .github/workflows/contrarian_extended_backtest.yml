@@ -6,12 +6,14 @@ on:
       - temp-contrarian-backtest-20260728
     paths:
       - 'contrarian_extended_backtest.py'
+      - 'extended_cnn_patch.py'
       - '.github/workflows/contrarian_extended_backtest.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'contrarian_extended_backtest.py'
+      - 'extended_cnn_patch.py'
       - '.github/workflows/contrarian_extended_backtest.yml'
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install pandas numpy requests beautifulsoup4 lxml xlrd openpyxl yfinance scipy matplotlib
-      - name: Cache audited HY OAS transport
+      - name: Cache audited external transports
         shell: bash
         run: |
           mkdir -p output_extended
@@ -37,12 +39,17 @@ jobs:
             --user-agent 'Mozilla/5.0' \
             'https://huggingface.co/datasets/Sashank-810/crisisnet-dataset/resolve/main/Module_1/credit_spreads/BAMLH0A0HYM2.csv?download=true' \
             --output output_extended/fred_hy_oas.csv
+          curl --fail --location --retry 4 --retry-all-errors --connect-timeout 30 --max-time 180 \
+            --user-agent 'Mozilla/5.0' \
+            'https://raw.githubusercontent.com/whit3rabbit/fear-greed-data/main/fear-greed.csv' \
+            --output output_extended/cnn_fear_greed_archive.csv
           test -s output_extended/fred_hy_oas.csv
+          test -s output_extended/cnn_fear_greed_archive.csv
       - name: Run extended backtest
         shell: bash
         run: |
           set +e
-          python contrarian_extended_backtest.py 2>&1 | tee output_extended/run.log
+          python -c "import extended_cnn_patch; import runpy; runpy.run_path('contrarian_extended_backtest.py', run_name='__main__')" 2>&1 | tee output_extended/run.log
           code=${PIPESTATUS[0]}
           echo "exit_code=$code" | tee -a output_extended/run.log
           exit $code
