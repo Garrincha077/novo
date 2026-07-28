@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python -c "import extended_cnn_patch; import runpy; runpy.run_path('contrarian_extended_backtest.py', run_name='__main__')" 2>&1 | tee output_extended/run.log
+          python -c "import contrarian_extended_backtest as extended; import extended_cnn_patch; extended.main()" 2>&1 | tee output_extended/run.log
           code=${PIPESTATUS[0]}
           echo "exit_code=$code" | tee -a output_extended/run.log
           exit $code
