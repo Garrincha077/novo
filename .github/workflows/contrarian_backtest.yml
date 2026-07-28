@@ -6,14 +6,14 @@ on:
       - temp-contrarian-backtest-20260728
     paths:
       - 'contrarian_backtest.py'
-      - 'sitecustomize.py'
+      - 'run_backtest_with_patch.py'
       - '.github/workflows/contrarian_backtest.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'contrarian_backtest.py'
-      - 'sitecustomize.py'
+      - 'run_backtest_with_patch.py'
       - '.github/workflows/contrarian_backtest.yml'
   workflow_dispatch:
 
@@ -50,7 +50,7 @@ jobs:
               --user-agent 'Mozilla/5.0' \
               'https://huggingface.co/datasets/Sashank-810/crisisnet-dataset/resolve/main/Module_1/credit_spreads/BAMLH0A0HYM2.csv?download=true' \
               --output output/fred_hy_oas.csv
-            echo 'public_fred_series_mirror_huggingface' > output/hy_oas_transport.txt
+            echo 'public_fred_series_mirror_huggingface_plus_official_fred_overlay' > output/hy_oas_transport.txt
           fi
           test -s output/fred_hy_oas.csv
           head -n 3 output/fred_hy_oas.csv
@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python contrarian_backtest.py 2>&1 | tee output/run.log
+          python run_backtest_with_patch.py 2>&1 | tee output/run.log
           code=${PIPESTATUS[0]}
           echo "exit_code=$code" | tee -a output/run.log
           exit $code
